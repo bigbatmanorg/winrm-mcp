@@ -21,7 +21,7 @@ def inventory_path(scope: str | None = None) -> tuple[Path, str]:
     if selected not in SCOPES:
         raise ValueError("inventory scope must be project or user")
     if selected == "project":
-        project_dir = Path(os.getenv("WINRM_MCP_PROJECT_DIR", os.getcwd())).expanduser().resolve()
+        project_dir = _project_directory()
         return project_dir / ".winrm-mcp" / "inventory.json", selected
 
     if os.name == "nt":
@@ -29,6 +29,33 @@ def inventory_path(scope: str | None = None) -> tuple[Path, str]:
     else:
         base = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "winrm-mcp" / "inventory.json", selected
+
+
+def _project_directory() -> Path:
+    configured = os.getenv("WINRM_MCP_PROJECT_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+
+    # MCP launchers commonly start their own server process in a temporary
+    # runtime directory while preserving the user's logical PWD. Prefer that
+    # inherited project context over the subprocess cwd.
+    logical_pwd = os.getenv("PWD")
+    if logical_pwd:
+        candidate = Path(logical_pwd).expanduser().resolve()
+        if candidate.is_dir() and not _is_ephemeral_launcher_path(candidate):
+            return candidate
+
+    current = Path.cwd().resolve()
+    if _is_ephemeral_launcher_path(current):
+        raise ValueError(
+            "project inventory cannot use an ephemeral DeepAgents runtime directory; "
+            "set WINRM_MCP_PROJECT_DIR to the actual project root"
+        )
+    return current
+
+
+def _is_ephemeral_launcher_path(path: Path) -> bool:
+    return any(part.startswith("deepagents_server_") for part in path.parts)
 
 
 class InventoryStore:

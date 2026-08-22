@@ -42,8 +42,10 @@ Hosts can be stored in either inventory scope:
 
 Choose the process default with `WINRM_MCP_INVENTORY_SCOPE=user` or `WINRM_MCP_INVENTORY_SCOPE=project`.
 Every inventory and host tool also accepts an explicit `scope`, and execution tools accept `inventory_scope`.
-Set `WINRM_MCP_PROJECT_DIR` when the server working directory is not the desired project root. A fully custom file
-is supported through `WINRM_MCP_INVENTORY_FILE`; it is used when a call does not explicitly select a scope.
+Project scope uses `WINRM_MCP_PROJECT_DIR`, then the launcher's logical `PWD`, then the process working directory.
+It refuses temporary `deepagents_server_*` paths instead of silently saving disposable inventory data. Set
+`WINRM_MCP_PROJECT_DIR` when the launcher working directory is not the desired project root. A fully custom file is
+supported through `WINRM_MCP_INVENTORY_FILE`; it is used when a call does not explicitly select a scope.
 
 Create a project inventory and save two hosts:
 
@@ -117,6 +119,7 @@ entry to your DeepAgents `.deepagents/.mcp.json` file:
       "WINRM_MCP_SSL": "true",
       "WINRM_MCP_CERT_VALIDATION": "false",
       "WINRM_MCP_INVENTORY_SCOPE": "project",
+      "WINRM_MCP_PROJECT_DIR": "${PWD}",
       "WINRM_MCP_CONNECT_TIMEOUT": "30",
       "WINRM_MCP_READ_TIMEOUT": "60",
       "WINRM_MCP_OPERATION_TIMEOUT": "30"
@@ -134,6 +137,8 @@ For reproducible installations, pin the repository to a release tag or commit:
 The example uses HTTPS with certificate verification disabled for a trusted development host with a self-signed
 certificate. Keep `WINRM_MCP_CERT_VALIDATION=true` when the listener certificate is trusted. Do not commit a real
 password to source control; use your normal DeepAgents secret-injection workflow for `WINRM_MCP_PASSWORD`.
+DeepAgents expands `${PWD}` before launching the MCP server. Replace it with an absolute path if DeepAgents itself
+is launched from somewhere other than the project root.
 
 ## Install and run
 

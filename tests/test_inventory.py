@@ -17,6 +17,31 @@ def test_project_and_user_paths(monkeypatch: pytest.MonkeyPatch, tmp_path) -> No
     assert inventory_path("user")[0] == tmp_path / "config" / "winrm-mcp" / "inventory.json"
 
 
+def test_project_path_uses_logical_pwd_outside_launcher_temp(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    launcher = tmp_path / "deepagents_server_123"
+    launcher.mkdir()
+    monkeypatch.delenv("WINRM_MCP_PROJECT_DIR", raising=False)
+    monkeypatch.setenv("PWD", str(project))
+    monkeypatch.chdir(launcher)
+    assert inventory_path("project")[0] == project / ".winrm-mcp" / "inventory.json"
+
+
+def test_project_path_rejects_ephemeral_launcher_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    launcher = tmp_path / "deepagents_server_123"
+    launcher.mkdir()
+    monkeypatch.delenv("WINRM_MCP_PROJECT_DIR", raising=False)
+    monkeypatch.setenv("PWD", str(launcher))
+    monkeypatch.chdir(launcher)
+    with pytest.raises(ValueError, match="ephemeral DeepAgents runtime"):
+        inventory_path("project")
+
+
 def test_inventory_crud_redacts_and_writes_atomically(tmp_path) -> None:
     path = tmp_path / "inventory.json"
     store = InventoryStore(path=path)

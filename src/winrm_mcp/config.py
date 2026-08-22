@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -26,15 +26,30 @@ class WinRMConfig:
     operation_timeout: int = 30
 
     @classmethod
-    def from_mapping(cls, connection: dict[str, Any] | None = None) -> WinRMConfig:
-        data = _environment_defaults()
-        if connection is not None:
-            if not isinstance(connection, dict):
+    def from_mapping(
+        cls,
+        connection: dict[str, Any] | None = None,
+        *,
+        include_environment: bool = True,
+    ) -> WinRMConfig:
+        return cls.from_sources(connection, include_environment=include_environment)
+
+    @classmethod
+    def from_sources(
+        cls,
+        *sources: dict[str, Any] | None,
+        include_environment: bool = True,
+    ) -> WinRMConfig:
+        data = _environment_defaults() if include_environment else {}
+        for source in sources:
+            if source is None:
+                continue
+            if not isinstance(source, dict):
                 raise ConfigurationError("connection must be an object")
-            unknown = set(connection) - set(cls.__dataclass_fields__)
+            unknown = set(source) - set(cls.__dataclass_fields__)
             if unknown:
                 raise ConfigurationError(f"unknown connection fields: {', '.join(sorted(unknown))}")
-            data.update({key: value for key, value in connection.items() if value is not None})
+            data.update({key: value for key, value in source.items() if value is not None})
 
         host = str(data.get("host", "")).strip()
         if not host:
@@ -95,6 +110,12 @@ class WinRMConfig:
             "operation_timeout": self.operation_timeout,
             "encryption": self.encryption,
         }
+
+    def to_dict(self, *, redact: bool = False) -> dict[str, Any]:
+        data = asdict(self)
+        if redact and data.get("password"):
+            data["password"] = "***REDACTED***"
+        return {key: value for key, value in data.items() if value is not None}
 
 
 def _environment_defaults() -> dict[str, Any]:

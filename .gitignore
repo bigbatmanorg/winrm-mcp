@@ -1,4 +1,5 @@
 .venv/
+.winrm-mcp/
 __pycache__/
 .pytest_cache/
 .ruff_cache/

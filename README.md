@@ -91,6 +91,9 @@ The optional `connection` object overrides fields from the saved host for that c
 and the inventory file is restricted to the current user (`0600`) on Unix-like systems. Inline passwords are
 supported but stored as plaintext in that protected JSON file; prefer `password_env`.
 
+Omit `connection` when no overrides are needed. For compatibility with agents that serialize an optional value as
+text, `connection="None"`, `connection="null"`, and an empty connection string are treated as JSON `null`.
+
 ## DeepAgents
 
 DeepAgents can run the server directly from GitHub, so a local checkout is not required. Add the following

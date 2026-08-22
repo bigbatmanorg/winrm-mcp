@@ -1,13 +1,26 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import BeforeValidator
 
 from .client import execute
 from .config import WinRMConfig
 from .inventory import InventoryStore
+
+
+def _normalize_optional_connection(value: Any) -> Any:
+    if isinstance(value, str) and value.strip().lower() in {"", "none", "null"}:
+        return None
+    return value
+
+
+ConnectionInput = Annotated[
+    dict[str, Any] | None,
+    BeforeValidator(_normalize_optional_connection),
+]
 
 mcp = FastMCP(
     "WinRM",
@@ -116,7 +129,7 @@ def winrm_host_delete(name: str, scope: str | None = None) -> dict[str, Any]:
 @mcp.tool()
 async def winrm_test(
     saved_host: str | None = None,
-    connection: dict[str, Any] | None = None,
+    connection: ConnectionInput = None,
     inventory_scope: str | None = None,
     timeout: float = 30,
 ) -> dict[str, Any]:
@@ -132,7 +145,7 @@ async def winrm_test(
 async def winrm_execute_powershell(
     command: str,
     saved_host: str | None = None,
-    connection: dict[str, Any] | None = None,
+    connection: ConnectionInput = None,
     inventory_scope: str | None = None,
     timeout: float = 300,
     cwd: str | None = None,
@@ -149,7 +162,7 @@ async def winrm_execute_powershell(
 async def winrm_execute_cmd(
     command: str,
     saved_host: str | None = None,
-    connection: dict[str, Any] | None = None,
+    connection: ConnectionInput = None,
     inventory_scope: str | None = None,
     timeout: float = 300,
     cwd: str | None = None,

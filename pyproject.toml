@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "winrm-mcp"
-version = "0.2.2"
+version = "0.3.0"
 description = "A small MCP server for executing PowerShell and CMD commands over WinRM"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,3 +32,9 @@ asyncio_mode = "auto"
 [tool.ruff]
 line-length = 110
 target-version = "py310"
+
+[tool.ruff.lint]
+# Pinned so local and CI runs agree regardless of any user-level ruff configuration.
+select = ["E", "F", "I", "W", "UP", "B"]
+# Tool docstrings are MCP descriptions and are kept on one line.
+ignore = ["E501"]

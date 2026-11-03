@@ -42,4 +42,3 @@ def test_read_timeout_is_adjusted_for_pypsrp() -> None:
         }
     )
     assert config.read_timeout == 70
-

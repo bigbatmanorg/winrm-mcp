@@ -10,6 +10,10 @@ from winrm_mcp.server import mcp
 def test_server_registers_winrm_and_inventory_tools() -> None:
     tool_manager = mcp._tool_manager
     assert set(tool_manager._tools) == {
+        "winrm_policy",
+        "winrm_execute_many",
+        "winrm_upload",
+        "winrm_download",
         "winrm_test",
         "winrm_execute_powershell",
         "winrm_execute_cmd",
@@ -65,3 +69,40 @@ async def test_connection_rejects_other_strings() -> None:
             "winrm_test",
             {"saved_host": "saved", "connection": "not-a-connection", "inventory_scope": "project"},
         )
+
+
+def test_every_tool_is_annotated() -> None:
+    for name, tool in mcp._tool_manager._tools.items():
+        assert tool.annotations is not None and tool.annotations.readOnlyHint is not None, name
+    tools = mcp._tool_manager._tools
+    assert tools["winrm_execute_powershell"].annotations.destructiveHint is True
+    assert tools["winrm_host_list"].annotations.readOnlyHint is True
+
+
+async def test_execute_many_reports_each_host(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    from winrm_mcp.inventory import InventoryStore
+
+    store = InventoryStore(path=tmp_path / "inventory.json")
+    for name in ("web1", "web2", "db1"):
+        store.save(
+            name,
+            {
+                "host": f"{name}.example",
+                "username": "u",
+                "password_env": "X_PASSWORD",
+                "tags": ["web"] if name.startswith("web") else ["db"],
+            },
+        )
+    monkeypatch.setattr(server, "_store", lambda scope: store)
+    monkeypatch.setenv("X_PASSWORD", "secret")
+
+    async def fake_execute(config: Any, command: str, **kwargs: Any) -> CommandResult:
+        if config.host == "web2.example":
+            raise ConnectionError("unreachable")
+        return CommandResult(config.host, "powershell", command, "ok", "", 0, 0.1, True)
+
+    monkeypatch.setattr(server, "execute", fake_execute)
+    result = await server.winrm_execute_many("hostname", tag="web")
+    assert (result["hosts"], result["succeeded"], result["failed"]) == (2, 1, 1)
+    assert {r["saved_host"]: r["ok"] for r in result["results"]} == {"web1": True, "web2": False}
+    assert "unreachable" in next(r for r in result["results"] if not r["ok"])["error"]

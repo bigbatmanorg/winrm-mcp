@@ -30,9 +30,7 @@ def test_project_path_uses_logical_pwd_outside_launcher_temp(
     assert inventory_path("project")[0] == project / ".winrm-mcp" / "inventory.json"
 
 
-def test_project_path_rejects_ephemeral_launcher_directory(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_project_path_rejects_ephemeral_launcher_directory(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     launcher = tmp_path / "deepagents_server_123"
     launcher.mkdir()
     monkeypatch.delenv("WINRM_MCP_PROJECT_DIR", raising=False)

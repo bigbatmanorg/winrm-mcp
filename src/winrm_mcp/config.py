@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 
 class ConfigurationError(ValueError):
     """Raised when WinRM connection settings are invalid."""
+
+
+AUTH_METHODS = {"basic", "certificate", "credssp", "kerberos", "negotiate", "ntlm"}
 
 
 @dataclass(slots=True)
@@ -24,6 +28,9 @@ class WinRMConfig:
     connect_timeout: int = 30
     read_timeout: int = 60
     operation_timeout: int = 30
+    certificate_pem: str | None = None
+    certificate_key_pem: str | None = None
+    tags: list[str] | None = None
 
     @classmethod
     def from_mapping(
@@ -73,6 +80,22 @@ class WinRMConfig:
     def validate(self) -> None:
         if self.port is not None and not 1 <= self.port <= 65535:
             raise ConfigurationError("port must be between 1 and 65535")
+        self.auth = str(self.auth).strip().lower()
+        if self.auth not in AUTH_METHODS:
+            raise ConfigurationError(f"auth must be one of {', '.join(sorted(AUTH_METHODS))}")
+        if self.auth == "certificate":
+            if not (self.certificate_pem and self.certificate_key_pem):
+                raise ConfigurationError(
+                    "certificate auth requires certificate_pem and certificate_key_pem paths"
+                )
+            if not self.ssl:
+                raise ConfigurationError("certificate auth requires ssl=true")
+        if self.tags is not None:
+            if not isinstance(self.tags, list) or not all(
+                isinstance(t, str) and t.strip() for t in self.tags
+            ):
+                raise ConfigurationError("tags must be a list of non-empty strings")
+            self.tags = sorted({t.strip() for t in self.tags})
         if self.auth != "certificate" and not self.username:
             raise ConfigurationError("username is required for this authentication method")
         if self.encryption not in {"auto", "always", "never"}:
@@ -97,7 +120,16 @@ class WinRMConfig:
         return value
 
     def client_kwargs(self) -> dict[str, Any]:
+        certificate = (
+            {
+                "certificate_pem": str(Path(self.certificate_pem).expanduser()),
+                "certificate_key_pem": str(Path(self.certificate_key_pem).expanduser()),
+            }
+            if self.auth == "certificate"
+            else {}
+        )
         return {
+            **certificate,
             "port": self.effective_port,
             "username": self.username,
             "password": self.resolved_password(),
@@ -133,6 +165,8 @@ def _environment_defaults() -> dict[str, Any]:
         "connect_timeout": "WINRM_MCP_CONNECT_TIMEOUT",
         "read_timeout": "WINRM_MCP_READ_TIMEOUT",
         "operation_timeout": "WINRM_MCP_OPERATION_TIMEOUT",
+        "certificate_pem": "WINRM_MCP_CERTIFICATE_PEM",
+        "certificate_key_pem": "WINRM_MCP_CERTIFICATE_KEY_PEM",
     }
     return {field: os.environ[name] for field, name in names.items() if name in os.environ}
 

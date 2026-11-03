@@ -1,14 +1,21 @@
 # winrm-mcp
 
-A deliberately small MCP server for running PowerShell and CMD commands on Windows hosts over WinRM. It takes
-the WinRM execution ideas from `ssh-winrm-mcp`, adds a focused multi-host inventory, and leaves out SSH,
-persistent sessions, jobs, command groups, and file transfer.
+A focused MCP server for running PowerShell and CMD commands on Windows hosts over WinRM, with a multi-host
+inventory, parallel execution across tagged hosts, sandboxed file transfer and an operator-controlled security
+policy. It leaves out SSH, persistent sessions, jobs and command groups (see `ssh-winrm-mcp` for those).
+
+- Accurate exit codes, including PowerShell `exit N`; timed-out commands are stopped on the remote host.
+- `output_format="json"` returns PowerShell objects as parsed JSON instead of formatted text.
+- Every tool declares MCP annotations so clients can ask before running remote commands.
 
 ## Tools
 
-- `winrm_test` — verify authentication and connectivity.
-- `winrm_execute_powershell` — execute PowerShell.
-- `winrm_execute_cmd` — execute CMD.
+- `winrm_test` — verify authentication and connectivity; reports whether the account is a local administrator.
+- `winrm_execute_powershell` — execute PowerShell (`output_format="json"` for structured results).
+- `winrm_execute_cmd` — execute CMD; `env` sets real process environment variables.
+- `winrm_execute_many` — run one command on several saved hosts (by name or tag) in parallel, one result per host.
+- `winrm_upload`, `winrm_download` — copy files, confined to `WINRM_MCP_LOCAL_ROOT` (disabled unless set).
+- `winrm_policy` — show the version and the active security policy.
 - `winrm_inventory_status`, `winrm_inventory_init`, `winrm_inventory_validate` — manage inventory files.
 - `winrm_host_list`, `winrm_host_get`, `winrm_host_save`, `winrm_host_update`, `winrm_host_delete` — manage
   reusable hosts.
@@ -29,8 +36,24 @@ Each tool accepts an optional `connection` object. Values in it override the pro
 `ssl` chooses HTTPS (normally port 5986) versus HTTP (normally port 5985). `cert_validation=false` is needed for
 self-signed HTTPS listeners, but should only be used for trusted hosts.
 
-Supported connection fields are `host`, `username`, `password`, `password_env`, `port`, `ssl`, `auth`,
-`cert_validation`, `encryption`, `path`, `connect_timeout`, `read_timeout`, and `operation_timeout`.
+Supported connection fields are `host`, `username`, `password`, `password_env`, `port`, `ssl`, `auth`
+(`ntlm`, `negotiate`, `kerberos`, `basic`, `credssp`, `certificate`), `cert_validation`, `encryption`, `path`,
+`connect_timeout`, `read_timeout`, `operation_timeout`, `certificate_pem` and `certificate_key_pem` (file paths for
+certificate auth over HTTPS), and `tags` (a list of labels for `winrm_host_list(tag=...)` and
+`winrm_execute_many(tag=...)`).
+
+## Security model
+
+Commands run with the remote account's full rights, and tool arguments come from an AI agent that untrusted
+content (web pages, files, command output) can steer. The operator limits what the agent can reach:
+
+| Setting | Default | Effect |
+|---|---|---|
+| `WINRM_MCP_ALLOWED_HOSTS` | any | Comma-separated glob patterns (`*.lab.example,10.0.110.*`); other hosts are refused, saved or not. |
+| `WINRM_MCP_ALLOW_ADHOC` | `true` | `false` allows only saved hosts; per-call `connection` may then only change timeouts. |
+| `WINRM_MCP_SECRET_ENV_PATTERNS` | `*PASSWORD*,*PASSWD*,*_PASS` | `password_env` may only read matching variables, so an agent cannot send e.g. `AWS_SECRET_ACCESS_KEY` to a host it controls. |
+| `WINRM_MCP_ALLOW_INSECURE_BASIC` | `false` | Basic auth over plain HTTP sends the password in cleartext and is refused unless enabled. NTLM/Kerberos over HTTP use message encryption and are allowed. |
+| `WINRM_MCP_LOCAL_ROOT` | unset | Enables `winrm_upload`/`winrm_download`, confined to this directory. |
 
 ## Multi-host inventory
 
@@ -110,7 +133,7 @@ entry to your DeepAgents `.deepagents/.mcp.json` file:
       "--with",
       "mcp>=1.28,<2",
       "--from",
-      "git+https://github.com/bigbatmanorg/winrm-mcp.git",
+      "git+https://github.com/bigbatmanorg/winrm-mcp.git@v0.3.0",
       "winrm-mcp"
     ],
     "env": {
@@ -160,7 +183,7 @@ credentials in every tool call:
     "winrm": {
       "type": "stdio",
       "command": "uv",
-      "args": ["--directory", "/home/toor/projects/winrm-mcp", "run", "winrm-mcp"],
+      "args": ["--directory", "/absolute/path/to/winrm-mcp", "run", "winrm-mcp"],
       "env": {
         "WINRM_MCP_HOST": "192.168.1.50",
         "WINRM_MCP_USERNAME": "Administrator",
@@ -178,6 +201,18 @@ credentials in every tool call:
 Available environment defaults correspond to the connection fields and use the `WINRM_MCP_` prefix. Server
 settings are `WINRM_MCP_TRANSPORT`, `WINRM_MCP_SERVER_HOST`, and `WINRM_MCP_SERVER_PORT`. Inventory settings are
 `WINRM_MCP_INVENTORY_SCOPE`, `WINRM_MCP_PROJECT_DIR`, and `WINRM_MCP_INVENTORY_FILE`.
+
+## Testing
+
+```bash
+uv sync --extra dev
+uv run pytest                                  # offline unit tests
+WINRM_LIVE=1 uv run pytest tests/live -v       # live tests over MCP stdio against a Windows host
+```
+
+Live tests read `WINRM_TEST_HOST`, `WINRM_TEST_ADMIN_USER`/`WINRM_TEST_ADMIN_PASSWORD` (a local administrator)
+and `WINRM_TEST_USER`/`WINRM_TEST_USER_PASSWORD` (a member of *Remote Management Users*), for example from a
+gitignored `.env`.
 
 For Kerberos or CredSSP support, install the matching optional extra:
 
